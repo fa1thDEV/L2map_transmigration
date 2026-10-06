@@ -116,7 +116,7 @@ class UTXConsolidator:
             pkg_to_names.setdefault(pkg_name, set()).add(obj_name)
 
         # Package builder structures
-        names: List[str] = ["None", "Core", "Engine", "Package", "Class", "Texture"]
+        names: List[str] = ["None", "Core", "Engine", "Package", "Class", "Texture", "Shader", "ColorModifier"]
         name_flags: List[int] = [0x00070010] * len(names)
 
         def add_name(n: str, flg: int = 0x00070010) -> int:
@@ -128,23 +128,39 @@ class UTXConsolidator:
             name_flags.append(flg)
             return idx
 
-        # Imports table: Core.Package (root), Core.Class.Texture
+        # Imports table:
+        # Import 0: Core.Package Engine (root package)
+        # Import 1: Core.Class Texture (outer = -1 -> Engine)
+        # Import 2: Core.Class Shader (outer = -1 -> Engine)
+        # Import 3: Core.Class ColorModifier (outer = -1 -> Engine)
         imports_raw = bytearray()
-        # Import 0: Core.Package
+        # Import 0: Core.Package Engine
         imports_raw.extend(write_compact_index(add_name("Core")))
         imports_raw.extend(write_compact_index(add_name("Package")))
         imports_raw.extend(struct.pack("<i", 0))
-        imports_raw.extend(write_compact_index(add_name("Core")))
+        imports_raw.extend(write_compact_index(add_name("Engine")))
 
-        # Import 1: Core.Class.Texture
+        # Import 1: Core.Class Texture
         imports_raw.extend(write_compact_index(add_name("Core")))
         imports_raw.extend(write_compact_index(add_name("Class")))
-        imports_raw.extend(struct.pack("<i", 0))
+        imports_raw.extend(struct.pack("<i", -1))
         imports_raw.extend(write_compact_index(add_name("Texture")))
+
+        # Import 2: Core.Class Shader
+        imports_raw.extend(write_compact_index(add_name("Core")))
+        imports_raw.extend(write_compact_index(add_name("Class")))
+        imports_raw.extend(struct.pack("<i", -1))
+        imports_raw.extend(write_compact_index(add_name("Shader")))
+
+        # Import 3: Core.Class ColorModifier
+        imports_raw.extend(write_compact_index(add_name("Core")))
+        imports_raw.extend(write_compact_index(add_name("Class")))
+        imports_raw.extend(struct.pack("<i", -1))
+        imports_raw.extend(write_compact_index(add_name("ColorModifier")))
 
         # Buffer for new package
         out_buf = bytearray(b"\x00" * 64)
-        export_records: List[Tuple[str, int, int]] = []  # (name, offset, size)
+        export_records: List[Tuple[str, int, int, str]] = []  # (name, offset, size, class_type)
         bundled_count = 0
 
         for pkg_name, obj_names in pkg_to_names.items():
@@ -164,7 +180,15 @@ class UTXConsolidator:
 
                     obj_offset = len(out_buf)
                     out_buf.extend(raw_data)
-                    export_records.append((exp.object_name, obj_offset, len(raw_data)))
+
+                    # Determine class from source export
+                    cls_name = "texture"
+                    if exp.class_index < 0:
+                        src_imp_idx = -(exp.class_index + 1)
+                        if 0 <= src_imp_idx < len(src_pkg.imports):
+                            cls_name = src_pkg.imports[src_imp_idx].object_name.lower()
+
+                    export_records.append((exp.object_name, obj_offset, len(raw_data), cls_name))
                     add_name(exp.object_name)
                     bundled_count += 1
 
@@ -189,9 +213,16 @@ class UTXConsolidator:
         # Build ExportTable
         export_offset = len(out_buf)
         export_raw = bytearray()
-        for obj_name, off, sz in export_records:
+        for obj_name, off, sz, cls_name in export_records:
             name_idx = add_name(obj_name)
-            export_raw.extend(write_compact_index(-2))  # Import 1 (Texture)
+            if cls_name == "shader":
+                class_ref = -3  # Import 2: Shader
+            elif cls_name == "colormodifier":
+                class_ref = -4  # Import 3: ColorModifier
+            else:
+                class_ref = -2  # Import 1: Texture
+
+            export_raw.extend(write_compact_index(class_ref))
             export_raw.extend(write_compact_index(0))   # Super
             export_raw.extend(struct.pack("<i", 0))     # Package outer (root)
             export_raw.extend(write_compact_index(name_idx))
@@ -220,7 +251,7 @@ class UTXConsolidator:
             name_offset,
             len(export_records),
             export_offset,
-            2,  # import count
+            4,  # import count (Engine, Texture, Shader, ColorModifier)
             import_offset,
         )
 

@@ -115,20 +115,20 @@ class USXConsolidator:
             return idx
 
         # Imports:
-        # Import 0: Core.Package (root)
-        # Import 1: Core.Class.StaticMesh
+        # Import 0: Core.Package Engine (root package)
+        # Import 1: Core.Class StaticMesh (outer = -1 -> Engine)
         # Import 2: Core.Package (target texture package)
         imports_raw = bytearray()
-        # Import 0: Core.Package
+        # Import 0: Core.Package Engine
         imports_raw.extend(write_compact_index(add_name("Core")))
         imports_raw.extend(write_compact_index(add_name("Package")))
         imports_raw.extend(struct.pack("<i", 0))
-        imports_raw.extend(write_compact_index(add_name("Core")))
+        imports_raw.extend(write_compact_index(add_name("Engine")))
 
-        # Import 1: Core.Class.StaticMesh
+        # Import 1: Core.Class StaticMesh
         imports_raw.extend(write_compact_index(add_name("Core")))
         imports_raw.extend(write_compact_index(add_name("Class")))
-        imports_raw.extend(struct.pack("<i", 0))
+        imports_raw.extend(struct.pack("<i", -1))
         imports_raw.extend(write_compact_index(add_name("StaticMesh")))
 
         # Import 2: Core.Package (tex_pkg_name)
