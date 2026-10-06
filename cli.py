@@ -17,6 +17,7 @@ from texture_optimizer import batch_resize_folder
 from utx_extractor import UTXExtractor
 from terrain_inspector import MapInspector
 from engine_validator import ChronicleValidator
+from map_comparator import MapComparator
 
 
 DEFAULT_CLIENT = r"E:\EndlessWar-proyecto\2-Juego"
@@ -88,6 +89,12 @@ def main():
         action="store_true",
         help="Print detailed TerrainInfo and StaticMesh actor census.",
     )
+    parser.add_argument(
+        "--compare",
+        type=str,
+        default="",
+        help="Compare the target map (--unr) with another .unr map file across chronicles.",
+    )
 
     args = parser.parse_args()
 
@@ -115,11 +122,35 @@ def main():
         print(f"[ERROR] UNR file not found: {unr_path}")
         sys.exit(1)
 
+    # Mode 2: Cross-Chronicle Map Comparison
+    if args.compare:
+        map_b_path = Path(args.compare)
+        if not map_b_path.exists():
+            print(f"[ERROR] Map to compare not found: {map_b_path}")
+            sys.exit(1)
+        print(f"\n[MAP COMPARISON] Comparing {unr_path.name} vs {map_b_path.name}...")
+        comparator = MapComparator(unr_path, map_b_path)
+        diff = comparator.compare()
+        report_md = comparator.generate_markdown_report(diff)
+
+        print(f"  -> {diff.map_a_name}: {diff.actors_a:,} actors, {len(diff.packages_a)} pkgs, {len(diff.meshes_a)} meshes")
+        print(f"  -> {diff.map_b_name}: {diff.actors_b:,} actors, {len(diff.packages_b)} pkgs, {len(diff.meshes_b)} meshes")
+        print(f"  -> Actor Delta:    {diff.actors_b - diff.actors_a:+,} actors")
+        print(f"  -> Added Packages: {len(diff.packages_added)}")
+        print(f"  -> New Classes:    {len(diff.classes_added)} ({', '.join(sorted(diff.classes_added)) if diff.classes_added else 'None'})")
+
+        out_report_dir = Path(args.output) if args.output else unr_path.parent
+        out_report_dir.mkdir(parents=True, exist_ok=True)
+        report_file = out_report_dir / f"diff_{unr_path.stem}_vs_{map_b_path.stem}.md"
+        report_file.write_text(report_md, encoding="utf-8")
+        print(f"  -> Saved full diff report to: {report_file}\n")
+        return
+
     client_path = Path(args.client) if args.client else None
     out_dir = Path(args.output) if args.output else unr_path.parent / f"Export_{unr_path.stem}"
 
     print(f"\n=======================================================")
-    print(f" UNR Dependency & Downporting Toolkit v1.5")
+    print(f" UNR Dependency & Downporting Toolkit v1.6")
     print(f" Target Map:  {unr_path.name}")
     print(f" Client Root: {client_path if client_path else 'Not specified'}")
     print(f" Output Dir:  {out_dir}")

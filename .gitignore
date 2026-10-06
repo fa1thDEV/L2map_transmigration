@@ -6,3 +6,5 @@ Export*/
 *.log
 .vscode/
 .idea/
+Mapas de prueba/
+diff_*.md

@@ -21,6 +21,7 @@ from texture_optimizer import batch_resize_folder
 from utx_extractor import UTXExtractor
 from terrain_inspector import MapInspector, MapCensus
 from engine_validator import ChronicleValidator
+from map_comparator import MapComparator, MapDiffResult
 
 
 DEFAULT_CLIENT_DIR = r"E:\EndlessWar-proyecto\2-Juego"
@@ -182,7 +183,12 @@ class UNRToolApp:
         self.notebook.add(self.tab_validator, text="🛡️ Validador de Crónica")
         self._setup_validator_tab()
 
-        # Tab 8: Consola / Logs
+        # Tab 8: Comparador de Mapas (Diff)
+        self.tab_diff = ttk.Frame(self.notebook, padding=12)
+        self.notebook.add(self.tab_diff, text="🔄 Comparador (Diff)")
+        self._setup_diff_tab()
+
+        # Tab 9: Consola / Logs
         self.tab_logs = ttk.Frame(self.notebook, padding=8)
         self.notebook.add(self.tab_logs, text="📜 Logs")
         self._setup_logs_tab()
@@ -417,6 +423,88 @@ class UNRToolApp:
 
         self.tree_val.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
+
+    def _setup_diff_tab(self):
+        panel = ttk.Frame(self.tab_diff, style="Card.TFrame", padding=14)
+        panel.pack(fill="x", pady=(0, 8))
+
+        ttk.Label(panel, text="Comparador y Evolución de Mapas entre Crónicas", font=("Segoe UI", 12, "bold"), foreground=self.accent_color, style="Card.TLabel").pack(anchor="w", pady=(0, 4))
+        ttk.Label(panel, text="Compara dos archivos .unr (ej. C6 vs Classic, o Classic vs Samurai) y desglosa actores, mallas y paquetes.", style="Card.TLabel", foreground=self.text_muted).pack(anchor="w", pady=(0, 10))
+
+        # Map A
+        f_a = ttk.Frame(panel, style="Card.TFrame")
+        f_a.pack(fill="x", pady=2)
+        ttk.Label(f_a, text="Mapa A (Base):", style="Card.TLabel", width=16).pack(side="left")
+        self.entry_diff_a = tk.Entry(f_a, bg="#111827", fg=self.text_color, insertbackground="white")
+        self.entry_diff_a.pack(side="left", fill="x", expand=True, padx=6)
+        ttk.Button(f_a, text="Examinar...", command=self._browse_diff_a).pack(side="right")
+
+        # Map B
+        f_b = ttk.Frame(panel, style="Card.TFrame")
+        f_b.pack(fill="x", pady=2)
+        ttk.Label(f_b, text="Mapa B (Destino):", style="Card.TLabel", width=16).pack(side="left")
+        self.entry_diff_b = tk.Entry(f_b, bg="#111827", fg=self.text_color, insertbackground="white")
+        self.entry_diff_b.pack(side="left", fill="x", expand=True, padx=6)
+        ttk.Button(f_b, text="Examinar...", command=self._browse_diff_b).pack(side="right")
+
+        f_btn = ttk.Frame(panel, style="Card.TFrame")
+        f_btn.pack(fill="x", pady=(8, 0))
+        ttk.Button(f_btn, text="⚡ Comparar Mapas", style="Primary.TButton", command=self._on_compare_maps).pack(side="left", padx=4)
+        ttk.Button(f_btn, text="💾 Exportar Informe Markdown", command=self._on_save_diff_report).pack(side="left", padx=8)
+
+        # Delta Cards
+        self.cards_diff = ttk.Frame(self.tab_diff)
+        self.cards_diff.pack(fill="x", pady=6)
+
+        self.diff_vars = {
+            "size": tk.StringVar(value="-"),
+            "actors": tk.StringVar(value="-"),
+            "meshes": tk.StringVar(value="-"),
+            "pkgs": tk.StringVar(value="-"),
+        }
+
+        diff_cards = [
+            ("Delta Tamaño", "size"),
+            ("Delta Actores", "actors"),
+            ("Delta Mallas 3D", "meshes"),
+            ("Delta Paquetes", "pkgs"),
+        ]
+
+        for i, (label, key) in enumerate(diff_cards):
+            card = ttk.Frame(self.cards_diff, style="Card.TFrame", padding=10)
+            card.grid(row=0, column=i, padx=4, sticky="nsew")
+            self.cards_diff.columnconfigure(i, weight=1)
+
+            ttk.Label(card, text=label, style="MetricLbl.TLabel").pack(anchor="w")
+            ttk.Label(card, textvariable=self.diff_vars[key], style="MetricVal.TLabel").pack(anchor="w", pady=(3, 0))
+
+        # Diff Treeview
+        paned = tk.PanedWindow(self.tab_diff, orient="horizontal", bg=self.bg_color, sashrelief="flat", bd=0)
+        paned.pack(fill="both", expand=True, pady=(6, 0))
+
+        # Left: Actor class breakdown
+        f_left = ttk.Frame(paned, padding=4)
+        ttk.Label(f_left, text="Comparativa por Clase de Actor:", font=("Segoe UI", 10, "bold"), foreground=self.accent_color).pack(anchor="w", pady=4)
+        cols_act = ("cls", "cnt_a", "cnt_b", "delta")
+        self.tree_diff_actors = ttk.Treeview(f_left, columns=cols_act, show="headings", selectmode="browse")
+        self.tree_diff_actors.heading("cls", text="Clase de Actor")
+        self.tree_diff_actors.heading("cnt_a", text="Mapa A")
+        self.tree_diff_actors.heading("cnt_b", text="Mapa B")
+        self.tree_diff_actors.heading("delta", text="Diferencia")
+
+        self.tree_diff_actors.column("cls", width=180)
+        self.tree_diff_actors.column("cnt_a", width=75)
+        self.tree_diff_actors.column("cnt_b", width=75)
+        self.tree_diff_actors.column("delta", width=95)
+        self.tree_diff_actors.pack(fill="both", expand=True)
+        paned.add(f_left, weight=1)
+
+        # Right: New packages & classes in Map B
+        f_right = ttk.Frame(paned, padding=4)
+        ttk.Label(f_right, text="Novedades en Mapa B (Clases y Paquetes):", font=("Segoe UI", 10, "bold"), foreground=self.accent_color).pack(anchor="w", pady=4)
+        self.list_diff_news = tk.Listbox(f_right, bg="#0d1117", fg=self.text_color, font=("Consolas", 9), relief="flat")
+        self.list_diff_news.pack(fill="both", expand=True)
+        paned.add(f_right, weight=1)
 
     def _setup_logs_tab(self):
         self.txt_logs = tk.Text(self.tab_logs, bg="#0d1117", fg=self.text_color, font=("Consolas", 9), relief="flat")
@@ -752,6 +840,95 @@ class UNRToolApp:
                 )
         except Exception as e:
             messagebox.showerror("Error de Validación", str(e))
+
+    def _browse_diff_a(self):
+        path = filedialog.askopenfilename(title="Seleccionar Mapa A (.unr)", filetypes=[("Unreal Maps", "*.unr"), ("Todos", "*.*")])
+        if path:
+            self.entry_diff_a.delete(0, "end")
+            self.entry_diff_a.insert(0, path)
+
+    def _browse_diff_b(self):
+        path = filedialog.askopenfilename(title="Seleccionar Mapa B (.unr)", filetypes=[("Unreal Maps", "*.unr"), ("Todos", "*.*")])
+        if path:
+            self.entry_diff_b.delete(0, "end")
+            self.entry_diff_b.insert(0, path)
+
+    def _on_compare_maps(self):
+        path_a = self.entry_diff_a.get().strip()
+        path_b = self.entry_diff_b.get().strip()
+
+        if not path_a or not os.path.exists(path_a):
+            messagebox.showerror("Error", "Seleccione un archivo válido para el Mapa A.")
+            return
+        if not path_b or not os.path.exists(path_b):
+            messagebox.showerror("Error", "Seleccione un archivo válido para el Mapa B.")
+            return
+
+        self.status_var.set("Comparando mapas...")
+
+        def worker():
+            try:
+                comp = MapComparator(path_a, path_b)
+                diff = comp.compare()
+                self.last_diff_result = diff
+
+                def update():
+                    d_size = (diff.map_b_size - diff.map_a_size) / (1024 * 1024)
+                    self.diff_vars["size"].set(f"{'+' if d_size >= 0 else ''}{d_size:.2f} MB")
+                    d_act = diff.actors_b - diff.actors_a
+                    self.diff_vars["actors"].set(f"{'+' if d_act >= 0 else ''}{d_act:,}")
+                    d_mesh = len(diff.meshes_b) - len(diff.meshes_a)
+                    self.diff_vars["meshes"].set(f"{'+' if d_mesh >= 0 else ''}{d_mesh:,}")
+                    d_pkg = len(diff.packages_b) - len(diff.packages_a)
+                    self.diff_vars["pkgs"].set(f"{'+' if d_pkg >= 0 else ''}{d_pkg:,}")
+
+                    for item in self.tree_diff_actors.get_children():
+                        self.tree_diff_actors.delete(item)
+
+                    all_classes = sorted(set(diff.class_counts_a.keys()).union(set(diff.class_counts_b.keys())))
+                    for cls in all_classes:
+                        ca = diff.class_counts_a.get(cls, 0)
+                        cb = diff.class_counts_b.get(cls, 0)
+                        delta = cb - ca
+                        d_str = f"+{delta}" if delta > 0 else (str(delta) if delta < 0 else "=")
+                        self.tree_diff_actors.insert("", "end", values=(cls, ca, cb, d_str))
+
+                    self.list_diff_news.delete(0, "end")
+                    self.list_diff_news.insert("end", f"=== {len(diff.classes_added)} CLASES NUEVAS EN MAPA B ===")
+                    for c in sorted(diff.classes_added):
+                        self.list_diff_news.insert("end", f"  [Clase] +{c}")
+
+                    self.list_diff_news.insert("end", "")
+                    self.list_diff_news.insert("end", f"=== {len(diff.packages_added)} PAQUETES NUEVOS EN MAPA B ===")
+                    for p in sorted(diff.packages_added):
+                        self.list_diff_news.insert("end", f"  [Paquete] +{p}")
+
+                    self._log(f"Comparación finalizada: {diff.map_a_name} vs {diff.map_b_name}")
+
+                self.root.after(0, update)
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("Error al comparar", str(e)))
+            finally:
+                self.root.after(0, lambda: self.status_var.set("Listo."))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_save_diff_report(self):
+        if not hasattr(self, "last_diff_result") or not self.last_diff_result:
+            messagebox.showwarning("Atención", "Primero debe ejecutar la comparación entre dos mapas.")
+            return
+
+        out_path = filedialog.asksaveasfilename(
+            title="Guardar Informe de Comparación",
+            defaultextension=".md",
+            filetypes=[("Markdown", "*.md"), ("Texto", "*.txt")]
+        )
+        if out_path:
+            comp = MapComparator(self.last_diff_result.map_a_name, self.last_diff_result.map_b_name)
+            md = comp.generate_markdown_report(self.last_diff_result)
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(md)
+            messagebox.showinfo("Guardado", f"Informe guardado en:\n{out_path}")
 
     def _open_html_report(self):
         if self.last_html_report and self.last_html_report.exists():

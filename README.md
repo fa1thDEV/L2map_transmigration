@@ -1,29 +1,34 @@
-# UNR Dependency & Downporting Toolkit v1.5
+# UNR Dependency & Downporting Toolkit v1.6
 
-A complete, standalone Python toolkit to inspect, isolate, extract, and adapt Lineage 2 Unreal Engine 2 map sectors (`.unr`), their 3D static meshes (`.usx`), and texture dependencies (`.utx`).
+A complete, standalone Python toolkit to inspect, isolate, extract, adapt, and compare Lineage 2 Unreal Engine 2 map sectors (`.unr`), their 3D static meshes (`.usx`), and texture dependencies (`.utx`).
 
 ---
 
-## What's New in v1.5
+## What's New in v1.6
 
-1. **Native UTX Texture Extractor (`utx_extractor.py`)**:
+1. **Cross-Chronicle Map Comparator & Differ (`map_comparator.py`)**:
+   - Compares two `.unr` map sectors side-by-side (e.g. C6 Interlude vs Modern Samurai 542).
+   - Generates delta metrics: actor counts, added/removed packages, new engine classes, and mesh usage deltas.
+   - Outputs comprehensive Markdown comparison reports for migration and backporting analysis.
+
+2. **Native UTX Texture Extractor (`utx_extractor.py`)**:
    - Parses `.utx` texture packages directly (with L2 decryption).
    - Extracts embedded mipmaps and compressed DXT1, DXT3, DXT5, RGBA8, and G16 textures.
    - Automatically generates valid DirectX `.dds` files and standard `.png` images without needing external closed-source tools.
 
-2. **Terrain & Actor Placement Census (`terrain_inspector.py`)**:
+3. **Terrain & Actor Placement Census (`terrain_inspector.py`)**:
+   - Robust property parser handling UE2 state frames (`Pawn`/`Actor` execution blocks).
    - Parses `TerrainInfo` actors to extract heightmap references and terrain scale (X, Y, Z).
    - Counts exact placements of every 3D model on the map (e.g. `Glacia_base`: 2 instances).
    - Breaks down actor counts by class (`StaticMeshActor`, `Camera`, `Brush`, `TerrainSector`, etc.).
 
-3. **Engine Compatibility & Chronicle Validator (`engine_validator.py`)**:
-   - Validates map structure and actor classes against target chronicles: **C4 (Scions of Destiny)**, **Interlude (The Chaotic Throne)**, and **High Five**.
-   - Flags missing engine classes (e.g. `NMovableSunLight`, `NMoon`, `PostProcessVolume`) that will crash older game clients.
-   - Provides concrete recommendations to fix compatibility issues.
+4. **Engine Compatibility & Chronicle Validator (`engine_validator.py`)**:
+   - Validates map structure and actor classes against target chronicles: **C4 (Scions of Destiny)**, **Interlude (The Chaotic Throne)**, **High Five**, and **Classic**.
+   - Validated against unpacked `Engine.dll` class exports from actual game clients.
+   - Flags missing engine classes (e.g. `Spotlight`, `AmbientSoundWObject`, `NMovableSunLight`) that crash older game clients.
 
-4. **Default Client Auto-Detection**:
-   - Automatically detects the unpacked client in `E:\EndlessWar-proyecto\2-Juego`.
-   - Inspects unpacked DLLs (`Engine.dll`, `Core.dll`, `NWindow.dll`) for supported engine classes and structures.
+5. **Interactive Map Diff Tab in Desktop GUI (`gui.py`)**:
+   - Dedicated visual side-by-side comparison tab with colored deltas.
 
 ---
 
@@ -36,14 +41,17 @@ UNR_tool_v1/
 ├── unr_analyzer.py       # High-level map dependency analyzer
 ├── utx_extractor.py      # Native UTX texture extractor (DDS & PNG)
 ├── terrain_inspector.py  # TerrainInfo & StaticMesh placement inspector
-├── engine_validator.py   # Cross-chronicle compatibility validator (C4 / Interlude / H5)
+├── engine_validator.py   # Cross-chronicle compatibility validator (C4 / Interlude / H5 / Classic)
+├── map_comparator.py     # Cross-chronicle map differ and delta analyzer
 ├── asset_collector.py    # Asset copier and folder organizer
 ├── texture_optimizer.py  # Image batch resizer and Power-of-Two clamping
 ├── manifest_generator.py # JSON, HTML, and Markdown report generators
 ├── cli.py                # Command-Line Interface entry point
-├── gui.py                # Tkinter Graphical User Interface (v1.5)
+├── gui.py                # Tkinter Graphical User Interface (v1.6)
 ├── run_gui.bat           # 1-click Windows launcher for GUI
 ├── run_cli_example.bat   # Example CLI execution batch file
+├── COMPARACION_C6_VS_OUR.md       # Comparative study: C6 vs Classic
+├── COMPARACION_OUR_VS_SAMURAI.md  # Comparative study: Classic vs Modern Samurai
 └── README.md             # This documentation
 ```
 

@@ -103,47 +103,74 @@ class MapInspector:
         pos = exp.serial_offset
         end_pos = pos + exp.serial_size
 
-        while pos < end_pos:
-            name_idx, pos = read_compact_index(buf, pos)
-            pname = self.pkg.names[name_idx] if 0 <= name_idx < len(self.pkg.names) else ""
-            if pname == "None":
-                break
+        try:
+            while pos < end_pos:
+                name_idx, pos = read_compact_index(buf, pos)
+                pname = self.pkg.names[name_idx] if 0 <= name_idx < len(self.pkg.names) else ""
+                if pname == "None":
+                    break
 
-            info = buf[pos]
-            pos += 1
-            ptype = info & 0x0F
-            psize_type = (info >> 4) & 0x07
-            is_array = (info >> 7) & 0x01
-
-            if psize_type == 0: size = 1
-            elif psize_type == 1: size = 2
-            elif psize_type == 2: size = 4
-            elif psize_type == 3: size = 12
-            elif psize_type == 4: size = 16
-            elif psize_type == 5:
-                size = buf[pos]; pos += 1
-            elif psize_type == 6:
-                size = struct.unpack("<H", buf[pos:pos+2])[0]; pos += 2
-            elif psize_type == 7:
-                size = struct.unpack("<I", buf[pos:pos+4])[0]; pos += 4
-            else:
-                size = 1
-
-            if is_array:
-                b = buf[pos]
+                if pos >= end_pos:
+                    break
+                info = buf[pos]
                 pos += 1
-                if b & 0x80:
+                ptype = info & 0x0F
+                psize_type = (info >> 4) & 0x07
+                is_array = (info >> 7) & 0x01
+
+                if ptype == 3:  # Boolean property has 0 data bytes
+                    size = 0
+                elif psize_type == 0: size = 1
+                elif psize_type == 1: size = 2
+                elif psize_type == 2: size = 4
+                elif psize_type == 3: size = 12
+                elif psize_type == 4: size = 16
+                elif psize_type == 5:
+                    if pos >= end_pos: break
+                    size = buf[pos]; pos += 1
+                elif psize_type == 6:
+                    if pos + 2 > end_pos: break
+                    size = struct.unpack("<H", buf[pos:pos+2])[0]; pos += 2
+                elif psize_type == 7:
+                    if pos + 4 > end_pos: break
+                    size = struct.unpack("<I", buf[pos:pos+4])[0]; pos += 4
+                else:
+                    size = 1
+
+                if is_array:
+                    if pos >= end_pos: break
+                    b = buf[pos]
                     pos += 1
+                    if b & 0x80:
+                        if pos >= end_pos: break
+                        pos += 1
 
-            val_data = buf[pos : pos + size]
-            pos += size
+                val_data = buf[pos : pos + size]
+                pos += size
 
-            if pname.lower() == "staticmesh":
-                # Object reference: CompactIndex or INT32
-                obj_ref_idx, _ = read_compact_index(val_data, 0)
-                ref_str = self._resolve_object_ref(obj_ref_idx)
-                if ref_str:
-                    return ref_str
+                if pname.lower() == "staticmesh" and len(val_data) > 0:
+                    obj_ref_idx, _ = read_compact_index(val_data, 0)
+                    ref_str = self._resolve_object_ref(obj_ref_idx)
+                    if ref_str:
+                        return ref_str
+        except Exception:
+            pass
+
+        # Fallback scanner for actors with state frames (UE2.5 / Samurai / Ver133)
+        raw_slice = buf[exp.serial_offset : exp.serial_offset + exp.serial_size]
+        mesh_names_idx = {i for i, n in enumerate(self.pkg.names) if n.lower() == "staticmesh"}
+        for p in range(len(raw_slice) - 4):
+            try:
+                name_idx, p2 = read_compact_index(raw_slice, p)
+                if name_idx in mesh_names_idx and p2 < len(raw_slice):
+                    info = raw_slice[p2]
+                    if (info & 0x0F) == 5:  # Object property
+                        obj_idx, _ = read_compact_index(raw_slice, p2 + 1)
+                        ref_str = self._resolve_object_ref(obj_idx)
+                        if ref_str:
+                            return ref_str
+            except Exception:
+                pass
 
         return None
 
@@ -170,7 +197,9 @@ class MapInspector:
             psize_type = (info >> 4) & 0x07
             is_array = (info >> 7) & 0x01
 
-            if psize_type == 0: size = 1
+            if ptype == 3:  # Boolean property has 0 data bytes
+                size = 0
+            elif psize_type == 0: size = 1
             elif psize_type == 1: size = 2
             elif psize_type == 2: size = 4
             elif psize_type == 3: size = 12
@@ -193,7 +222,7 @@ class MapInspector:
             val_data = buf[pos : pos + size]
             pos += size
 
-            if pname.lower() == "terrainmap":
+            if pname.lower() == "terrainmap" and len(val_data) > 0:
                 obj_ref_idx, _ = read_compact_index(val_data, 0)
                 td.heightmap_texture = self._resolve_object_ref(obj_ref_idx)
             elif pname.lower() == "terrainscale" and len(val_data) >= 12:
