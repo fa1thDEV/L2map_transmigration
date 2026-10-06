@@ -66,22 +66,25 @@ class USXConsolidator:
 
     def consolidate(
         self,
-        unr_path: str | Path,
+        unr_path: str | Path | List[str | Path],
         output_path: str | Path,
         target_tex_pkg: Optional[str] = None,
         target_chronicle: Optional[str] = None,
     ) -> USXConsolidationReport:
-        unr_p = Path(unr_path)
+        unr_list = [Path(p) for p in unr_path] if isinstance(unr_path, (list, tuple)) else [Path(unr_path)]
         out_p = Path(output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
 
-        sector_name = unr_p.stem
+        sector_name = unr_list[0].stem.replace("_Classic", "").replace("_classic", "")
         tex_pkg_name = target_tex_pkg or f"Map_{sector_name}_T"
 
         analyzer = UNRAnalyzer(client_root=self.client_root)
-        unr_res = analyzer.analyze_map(unr_p, deep_mesh_scan=False)
+        all_mesh_refs: Set[str] = set()
 
-        all_mesh_refs: Set[str] = set(unr_res.static_meshes_used)
+        for unr_p in unr_list:
+            unr_res = analyzer.analyze_map(unr_p, deep_mesh_scan=False)
+            for m in unr_res.static_meshes_used:
+                all_mesh_refs.add(m)
 
         report = USXConsolidationReport(
             target_package_name=out_p.stem,

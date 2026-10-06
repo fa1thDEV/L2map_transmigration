@@ -42,7 +42,7 @@ class MapIsolator:
 
     def isolate_map(
         self,
-        unr_path: str | Path,
+        unr_path: str | Path | List[str | Path],
         output_dir: str | Path,
         target_chronicle: str = "interlude",
         target_mesh_pkg: Optional[str] = None,
@@ -50,10 +50,10 @@ class MapIsolator:
         encrypt_output: Optional[int] = None,
     ) -> MapIsolationResult:
         start_time = time.time()
-        unr_p = Path(unr_path)
+        unr_list = [Path(p) for p in unr_path] if isinstance(unr_path, (list, tuple)) else [Path(unr_path)]
         out_base = Path(output_dir)
 
-        sector = unr_p.stem
+        sector = unr_list[0].stem.replace("_Classic", "").replace("_classic", "")
         mesh_pkg = target_mesh_pkg or f"Map_{sector}_S"
         tex_pkg = target_tex_pkg or f"Map_{sector}_T"
 
@@ -66,50 +66,54 @@ class MapIsolator:
         static_meshes_dir.mkdir(parents=True, exist_ok=True)
         textures_dir.mkdir(parents=True, exist_ok=True)
 
-        out_unr = maps_dir / unr_p.name
         out_usx = static_meshes_dir / f"{mesh_pkg}.usx"
         out_utx = textures_dir / f"{tex_pkg}.utx"
 
-        # Step 1: Consolidate Textures
+        # Step 1: Consolidate Textures for all input maps
         print(f"[1/3] Consolidating textures into {out_utx.name}...")
         utx_builder = UTXConsolidator(client_root=self.client_root)
         utx_rep = utx_builder.consolidate(
-            unr_path=unr_p,
+            unr_path=unr_list,
             output_path=out_utx,
             target_chronicle=target_chronicle,
         )
         print(f"      -> {utx_rep.total_textures_bundled} textures bundled ({utx_rep.file_size_bytes / (1024*1024):.2f} MB)")
 
-        # Step 2: Consolidate StaticMeshes
+        # Step 2: Consolidate StaticMeshes for all input maps
         print(f"[2/3] Consolidating static meshes into {out_usx.name}...")
         usx_builder = USXConsolidator(client_root=self.client_root)
         usx_rep = usx_builder.consolidate(
-            unr_path=unr_p,
+            unr_path=unr_list,
             output_path=out_usx,
             target_tex_pkg=tex_pkg,
             target_chronicle=target_chronicle,
         )
         print(f"      -> {usx_rep.total_meshes_bundled} meshes bundled ({usx_rep.file_size_bytes / (1024*1024):.2f} MB)")
 
-        # Step 3: Remap UNR imports
-        print(f"[3/3] Remapping .unr references and patching for {target_chronicle.upper()}...")
-        remapper = UNRRemapper(unr_p)
-        remap_rep = remapper.remap(
-            output_path=out_unr,
-            target_mesh_pkg=mesh_pkg,
-            target_tex_pkg=tex_pkg,
-            target_chronicle=target_chronicle,
-        )
-        print(f"      -> {len(remap_rep.meshes_remapped)} meshes remapped to {mesh_pkg}")
-        print(f"      -> {len(remap_rep.textures_remapped)} textures remapped to {tex_pkg}")
-        if remap_rep.classes_downgraded:
-            print(f"      -> {len(remap_rep.classes_downgraded)} incompatible classes downgraded")
+        # Step 3: Remap each input UNR map
+        print(f"[3/3] Remapping {len(unr_list)} .unr map(s) and patching for {target_chronicle.upper()}...")
+        out_unrs: List[Path] = []
+        last_remap_rep = None
+        for u_path in unr_list:
+            out_unr = maps_dir / u_path.name
+            remapper = UNRRemapper(u_path)
+            last_remap_rep = remapper.remap(
+                output_path=out_unr,
+                target_mesh_pkg=mesh_pkg,
+                target_tex_pkg=tex_pkg,
+                target_chronicle=target_chronicle,
+            )
+            out_unrs.append(out_unr)
+            print(f"      -> Remapped {u_path.name}: {len(last_remap_rep.meshes_remapped)} meshes, {len(last_remap_rep.textures_remapped)} textures")
+            if last_remap_rep.classes_downgraded:
+                print(f"         ({len(last_remap_rep.classes_downgraded)} classes downgraded)")
 
         # Optional Step 4: Lineage 2 Header Encryption (e.g. Lineage2Ver111)
         if encrypt_output:
             print(f"      -> Encrypting packages with Lineage2Ver{encrypt_output:03d}...")
             from l2_crypt import encrypt_package_file
-            encrypt_package_file(out_unr, out_unr, version=encrypt_output)
+            for u in out_unrs:
+                encrypt_package_file(u, u, version=encrypt_output)
             encrypt_package_file(out_usx, out_usx, version=encrypt_output)
             encrypt_package_file(out_utx, out_utx, version=encrypt_output)
 
@@ -119,10 +123,10 @@ class MapIsolator:
             sector_name=sector,
             target_chronicle=target_chronicle,
             output_dir=out_base,
-            remapped_unr_path=out_unr,
+            remapped_unr_path=out_unrs[0],
             consolidated_usx_path=out_usx,
             consolidated_utx_path=out_utx,
-            remap_report=remap_rep,
+            remap_report=last_remap_rep,
             usx_report=usx_rep,
             utx_report=utx_rep,
             elapsed_seconds=elapsed,

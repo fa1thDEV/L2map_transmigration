@@ -77,28 +77,28 @@ class UTXConsolidator:
 
     def consolidate(
         self,
-        unr_path: str | Path,
+        unr_path: str | Path | List[str | Path],
         output_path: str | Path,
         target_chronicle: Optional[str] = None,
     ) -> UTXConsolidationReport:
-        unr_p = Path(unr_path)
+        unr_list = [Path(p) for p in unr_path] if isinstance(unr_path, (list, tuple)) else [Path(unr_path)]
         out_p = Path(output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
 
         analyzer = UNRAnalyzer(client_root=self.client_root)
-        unr_res = analyzer.analyze_map(unr_p, deep_mesh_scan=True)
-
-        # Collect all unique texture and shader identifiers
         all_tex_refs: Set[str] = set()
-        for t in unr_res.textures_used:
-            all_tex_refs.add(t)
-        for s in unr_res.shaders_used:
-            all_tex_refs.add(s)
 
-        # Add heightmap texture if present
-        sector_name = unr_p.stem
-        all_tex_refs.add(f"T_{sector_name}.Height.{sector_name}")
-        all_tex_refs.add(f"T_{sector_name}.{sector_name}")
+        for unr_p in unr_list:
+            unr_res = analyzer.analyze_map(unr_p, deep_mesh_scan=True)
+            for t in unr_res.textures_used:
+                all_tex_refs.add(t)
+            for s in unr_res.shaders_used:
+                all_tex_refs.add(s)
+
+            # Add heightmap texture if present
+            sector_name = unr_p.stem.replace("_Classic", "").replace("_classic", "")
+            all_tex_refs.add(f"T_{sector_name}.Height.{sector_name}")
+            all_tex_refs.add(f"T_{sector_name}.{sector_name}")
 
         report = UTXConsolidationReport(
             target_package_name=out_p.stem,
