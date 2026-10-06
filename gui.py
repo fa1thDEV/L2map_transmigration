@@ -22,6 +22,7 @@ from utx_extractor import UTXExtractor
 from terrain_inspector import MapInspector, MapCensus
 from engine_validator import ChronicleValidator
 from map_comparator import MapComparator, MapDiffResult
+from map_isolator import MapIsolator, MapIsolationResult
 
 
 DEFAULT_CLIENT_DIR = r"E:\EndlessWar-proyecto\2-Juego"
@@ -30,7 +31,7 @@ DEFAULT_CLIENT_DIR = r"E:\EndlessWar-proyecto\2-Juego"
 class UNRToolApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("UNR Dependency & Downporting Toolkit v1.5")
+        self.root.title("UNR Dependency & Downporting Toolkit v1.7")
         self.root.geometry("1100x750")
         self.root.minsize(900, 650)
 
@@ -188,7 +189,12 @@ class UNRToolApp:
         self.notebook.add(self.tab_diff, text="🔄 Comparador (Diff)")
         self._setup_diff_tab()
 
-        # Tab 9: Consola / Logs
+        # Tab 9: Empaquetador Autónomo (1 Archivo/Clase)
+        self.tab_isolate = ttk.Frame(self.notebook, padding=12)
+        self.notebook.add(self.tab_isolate, text="📦 Empaquetador Autónomo (1/Clase)")
+        self._setup_isolate_tab()
+
+        # Tab 10: Consola / Logs
         self.tab_logs = ttk.Frame(self.notebook, padding=8)
         self.notebook.add(self.tab_logs, text="📜 Logs")
         self._setup_logs_tab()
@@ -929,6 +935,178 @@ class UNRToolApp:
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write(md)
             messagebox.showinfo("Guardado", f"Informe guardado en:\n{out_path}")
+
+    def _setup_isolate_tab(self):
+        # Description header
+        header_card = ttk.Frame(self.tab_isolate, style="Card.TFrame", padding=12)
+        header_card.pack(fill="x", pady=(0, 10))
+
+        ttk.Label(
+            header_card,
+            text="Transmigración y Empaquetado Autónomo (Single-Package Isolation)",
+            font=("Segoe UI", 12, "bold"),
+            foreground=self.accent_color,
+            style="Card.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            header_card,
+            text="Consolida todas las mallas del mapa en 1 archivo .usx, todas las texturas en 1 archivo .utx,\n"
+                 "y remapea el .unr para que el mapa funcione de forma 100% plug & play en cualquier crónica sin depender de 90+ paquetes externos.",
+            style="Card.TLabel",
+            foreground=self.text_muted,
+        ).pack(anchor="w", pady=(4, 0))
+
+        # Config Frame
+        cfg_frame = ttk.Frame(self.tab_isolate, style="Card.TFrame", padding=12)
+        cfg_frame.pack(fill="x", pady=6)
+
+        r1 = ttk.Frame(cfg_frame, style="Card.TFrame")
+        r1.pack(fill="x", pady=4)
+        ttk.Label(r1, text="Crónica Destino:", style="Card.TLabel", width=18).pack(side="left")
+        self.combo_iso_chronicle = ttk.Combobox(
+            r1,
+            values=["C4 (Scions of Destiny)", "Interlude (C6)", "High Five (H5)", "Classic"],
+            state="readonly",
+            width=28,
+        )
+        self.combo_iso_chronicle.set("Interlude (C6)")
+        self.combo_iso_chronicle.pack(side="left", padx=5)
+
+        r2 = ttk.Frame(cfg_frame, style="Card.TFrame")
+        r2.pack(fill="x", pady=4)
+        ttk.Label(r2, text="Carpeta de Salida:", style="Card.TLabel", width=18).pack(side="left")
+        self.entry_iso_out = ttk.Entry(r2)
+        self.entry_iso_out.pack(side="left", fill="x", expand=True, padx=5)
+        ttk.Button(r2, text="Examinar...", command=self._browse_iso_out).pack(side="left")
+
+        # Action Buttons
+        btn_frame = ttk.Frame(self.tab_isolate, style="Card.TFrame", padding=8)
+        btn_frame.pack(fill="x", pady=6)
+        ttk.Button(
+            btn_frame,
+            text="🚀 Generar Paquete Autónomo Plug & Play",
+            style="Action.TButton",
+            command=self._on_isolate_map,
+        ).pack(side="left", padx=5)
+
+        ttk.Button(
+            btn_frame,
+            text="📂 Abrir Carpeta de Salida",
+            style="Primary.TButton",
+            command=self._open_iso_output_folder,
+        ).pack(side="left", padx=5)
+
+        # Metrics cards
+        m_frame = ttk.Frame(self.tab_isolate, style="Card.TFrame", padding=10)
+        m_frame.pack(fill="x", pady=6)
+
+        self.iso_vars = {
+            "meshes": tk.StringVar(value="-"),
+            "textures": tk.StringVar(value="-"),
+            "downgraded": tk.StringVar(value="-"),
+            "size": tk.StringVar(value="-"),
+        }
+
+        cols = [
+            ("Mallas Consolidadas", "meshes"),
+            ("Texturas Consolidadas", "textures"),
+            ("Clases Parcheadas", "downgraded"),
+            ("Tamaño del Bundle", "size"),
+        ]
+        for title, key in cols:
+            c = ttk.Frame(m_frame, style="Card.TFrame", padding=8)
+            c.pack(side="left", expand=True, fill="both", padx=4)
+            ttk.Label(c, textvariable=self.iso_vars[key], font=("Segoe UI", 16, "bold"), foreground=self.accent_color, style="Card.TLabel").pack()
+            ttk.Label(c, text=title, font=("Segoe UI", 8), foreground=self.text_muted, style="Card.TLabel").pack()
+
+        # Log & details
+        det_frame = ttk.Frame(self.tab_isolate, style="Card.TFrame", padding=8)
+        det_frame.pack(fill="both", expand=True, pady=6)
+        ttk.Label(det_frame, text="Detalles de la Transmigración:", font=("Segoe UI", 9, "bold"), style="Card.TLabel").pack(anchor="w")
+        self.text_iso_log = tk.Text(det_frame, bg="#182234", fg=self.text_color, font=("Consolas", 9), relief="flat")
+        self.text_iso_log.pack(fill="both", expand=True, pady=4)
+
+    def _browse_iso_out(self):
+        d = filedialog.askdirectory(title="Seleccionar Carpeta para Bundle Autónomo")
+        if d:
+            self.entry_iso_out.delete(0, "end")
+            self.entry_iso_out.insert(0, d)
+
+    def _open_iso_output_folder(self):
+        out_d = self.entry_iso_out.get().strip()
+        if out_d and os.path.exists(out_d):
+            os.startfile(out_d)
+        else:
+            messagebox.showinfo("Carpeta", "La carpeta de salida aún no existe o no ha sido creada.")
+
+    def _on_isolate_map(self):
+        unr_path = self.entry_unr.get().strip()
+        client_dir = self.entry_client.get().strip()
+
+        if not unr_path or not os.path.exists(unr_path):
+            messagebox.showerror("Error", "Seleccione un archivo de mapa (.unr) válido en el panel superior.")
+            return
+        if not client_dir or not os.path.exists(client_dir):
+            messagebox.showerror("Error", "Especifique una carpeta de cliente válida con Textures y StaticMeshes.")
+            return
+
+        out_d = self.entry_iso_out.get().strip()
+        if not out_d:
+            stem = Path(unr_path).stem
+            out_d = str(Path(unr_path).parent / f"Isolated_{stem}")
+            self.entry_iso_out.delete(0, "end")
+            self.entry_iso_out.insert(0, out_d)
+
+        ch_map = {
+            "C4 (Scions of Destiny)": "c4",
+            "Interlude (C6)": "interlude",
+            "High Five (H5)": "h5",
+            "Classic": "classic",
+        }
+        target_ch = ch_map.get(self.combo_iso_chronicle.get(), "interlude")
+
+        self.status_var.set("Empaquetando recursos en paquetes autónomos...")
+        self.text_iso_log.delete("1.0", "end")
+        self.text_iso_log.insert("end", f"Iniciando Single-Package Transmigration para {Path(unr_path).name}...\n")
+        self.text_iso_log.insert("end", f"Crónica destino: {target_ch.upper()}\n\n")
+
+        def worker():
+            try:
+                isolator = MapIsolator(client_root=client_dir)
+                res = isolator.isolate_map(
+                    unr_path=unr_path,
+                    output_dir=out_d,
+                    target_chronicle=target_ch,
+                )
+
+                def update():
+                    self.iso_vars["meshes"].set(f"{res.usx_report.total_meshes_bundled:,}")
+                    self.iso_vars["textures"].set(f"{res.utx_report.total_textures_bundled:,}")
+                    self.iso_vars["downgraded"].set(f"{len(res.remap_report.classes_downgraded)}")
+                    tot_mb = (res.remap_report.file_size_after + res.usx_report.file_size_bytes + res.utx_report.file_size_bytes) / (1024 * 1024)
+                    self.iso_vars["size"].set(f"{tot_mb:.2f} MB")
+
+                    self.text_iso_log.insert("end", f"[ÉXITO] Proceso completado en {res.elapsed_seconds:.2f} segundos!\n\n")
+                    self.text_iso_log.insert("end", f"Archivos generados en {res.output_dir}:\n")
+                    self.text_iso_log.insert("end", f"  * Maps/{res.remapped_unr_path.name} ({res.remap_report.file_size_after / (1024*1024):.2f} MB)\n")
+                    self.text_iso_log.insert("end", f"  * StaticMeshes/{res.consolidated_usx_path.name} ({res.usx_report.file_size_bytes / (1024*1024):.2f} MB)\n")
+                    self.text_iso_log.insert("end", f"  * Textures/{res.consolidated_utx_path.name} ({res.utx_report.file_size_bytes / (1024*1024):.2f} MB)\n\n")
+                    self.text_iso_log.insert("end", f"Paquetes externos eliminados: {len(res.remap_report.old_packages_replaced)} paquetes unificados.\n")
+                    if res.remap_report.classes_downgraded:
+                        self.text_iso_log.insert("end", "Clases modernas adaptadas:\n")
+                        for o, r in res.remap_report.classes_downgraded.items():
+                            self.text_iso_log.insert("end", f"  - {o} -> {r}\n")
+
+                    self._log(f"Empaquetado autónomo completado: {Path(unr_path).name} en {out_d}")
+                    messagebox.showinfo("Empaquetado Exitoso", f"El mapa ha sido completamente aislado en 3 archivos autónomos:\n\nCarpeta: {res.output_dir}")
+
+                self.root.after(0, update)
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("Error de Empaquetado", str(e)))
+            finally:
+                self.root.after(0, lambda: self.status_var.set("Listo."))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _open_html_report(self):
         if self.last_html_report and self.last_html_report.exists():

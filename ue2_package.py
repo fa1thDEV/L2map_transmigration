@@ -37,6 +37,27 @@ def read_compact_index(buf: bytes, pos: int) -> Tuple[int, int]:
     return result, pos
 
 
+def write_compact_index(val: int) -> bytes:
+    """
+    Encodes an integer into an Unreal Engine compact integer index.
+    """
+    out = bytearray()
+    sign = 0x80 if val < 0 else 0
+    val = abs(val)
+    b0 = (val & 0x3F) | sign
+    val >>= 6
+    if val > 0:
+        b0 |= 0x40
+    out.append(b0)
+    while val > 0:
+        b = val & 0x7F
+        val >>= 7
+        if val > 0:
+            b |= 0x80
+        out.append(b)
+    return bytes(out)
+
+
 @dataclass
 class PackageSummary:
     tag: int
@@ -62,6 +83,9 @@ class ImportEntry:
     object_name: str
     full_path: str = ""
     top_package: str = ""
+    class_package_index: int = 0
+    class_name_index: int = 0
+    object_name_index: int = 0
 
 
 @dataclass
@@ -76,6 +100,7 @@ class ExportEntry:
     serial_offset: int
     class_name: str = ""
     full_path: str = ""
+    object_name_index: int = 0
 
 
 class UE2Package:
@@ -88,6 +113,7 @@ class UE2Package:
 
         self.summary: Optional[PackageSummary] = None
         self.names: List[str] = []
+        self.name_flags: List[int] = []
         self.imports: List[ImportEntry] = []
         self.exports: List[ExportEntry] = []
 
@@ -110,6 +136,14 @@ class UE2Package:
         if tag != UNREAL_MAGIC:
             raise ValueError(f"Invalid UE2 magic in {self.filename}: 0x{tag:08X}")
 
+        guid = buf[36:52] if len(buf) >= 52 else b""
+        gen_cnt = struct.unpack("<I", buf[52:56])[0] if len(buf) >= 56 else 0
+        generations: List[Tuple[int, int]] = []
+        if gen_cnt > 0 and len(buf) >= 56 + gen_cnt * 8:
+            for g in range(gen_cnt):
+                e_c, n_c = struct.unpack("<II", buf[56 + g * 8 : 64 + g * 8])
+                generations.append((e_c, n_c))
+
         self.summary = PackageSummary(
             tag=tag,
             file_version=ver,
@@ -121,6 +155,8 @@ class UE2Package:
             export_offset=e_off,
             import_count=i_count,
             import_offset=i_off,
+            guid=guid,
+            generations=generations,
         )
 
         self._parse_names()
@@ -132,6 +168,7 @@ class UE2Package:
         buf = self.raw_data
         pos = self.summary.name_offset
         self.names = []
+        self.name_flags = []
 
         for _ in range(self.summary.name_count):
             length, pos = read_compact_index(buf, pos)
@@ -144,9 +181,10 @@ class UE2Package:
                 pos += ulen
             else:
                 s = ""
-            # Skip 4-byte FName flags
+            flags = struct.unpack("<I", buf[pos : pos + 4])[0]
             pos += 4
             self.names.append(s)
+            self.name_flags.append(flags)
 
     def _parse_imports(self):
         buf = self.raw_data
@@ -170,6 +208,9 @@ class UE2Package:
                 class_name=cn,
                 package_index=pkg_idx,
                 object_name=on,
+                class_package_index=class_pkg_idx,
+                class_name_index=class_name_idx,
+                object_name_index=obj_name_idx,
             )
             self.imports.append(entry)
 
@@ -202,6 +243,7 @@ class UE2Package:
                 object_flags=obj_flags,
                 serial_size=serial_size,
                 serial_offset=serial_offset,
+                object_name_index=obj_name_idx,
             )
             self.exports.append(entry)
 
@@ -236,3 +278,122 @@ class UE2Package:
     def get_imports_by_class(self, class_name: str) -> List[ImportEntry]:
         """Returns all import entries matching a specific class (e.g. 'StaticMesh', 'Texture')."""
         return [imp for imp in self.imports if imp.class_name.lower() == class_name.lower()]
+
+    def add_name(self, name: str, flags: int = 0x00070010) -> int:
+        """Finds or appends a name to the name table. Returns its index."""
+        for idx, n in enumerate(self.names):
+            if n.lower() == name.lower():
+                return idx
+        idx = len(self.names)
+        self.names.append(name)
+        self.name_flags.append(flags)
+        return idx
+
+    def add_import(self, class_package: str, class_name: str, package_index: int, object_name: str) -> int:
+        """Adds a new import entry. Returns its index."""
+        cp_idx = self.add_name(class_package)
+        cn_idx = self.add_name(class_name)
+        on_idx = self.add_name(object_name)
+
+        idx = len(self.imports)
+        entry = ImportEntry(
+            index=idx,
+            class_package=class_package,
+            class_name=class_name,
+            package_index=package_index,
+            object_name=object_name,
+            class_package_index=cp_idx,
+            class_name_index=cn_idx,
+            object_name_index=on_idx,
+        )
+        self.imports.append(entry)
+        self._resolve_paths()
+        return idx
+
+    def serialize_tables_and_save(
+        self,
+        output_path: str | Path,
+        target_version: Optional[int] = None,
+        target_license: Optional[int] = None,
+    ) -> bytes:
+        """
+        Serializes updated NameTable, ImportTable, and ExportTable,
+        appends them to the object data, updates the header, and writes to output_path.
+        """
+        out_p = Path(output_path)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+
+        # 1. Determine end of raw object data
+        data_end = min(self.summary.import_offset, self.summary.export_offset)
+        out_buf = bytearray(self.raw_data[:data_end])
+
+        # 2. Serialize NameTable
+        name_bytes = bytearray()
+        for idx, name in enumerate(self.names):
+            nb = name.encode("latin1", errors="replace")
+            name_bytes.extend(write_compact_index(len(nb) + 1))
+            name_bytes.extend(nb)
+            name_bytes.append(0)
+            flg = self.name_flags[idx] if idx < len(self.name_flags) else 0x00070010
+            name_bytes.extend(struct.pack("<I", flg))
+
+        new_name_offset = len(out_buf)
+        out_buf.extend(name_bytes)
+
+        # 3. Serialize ImportTable
+        import_bytes = bytearray()
+        for imp in self.imports:
+            cp_idx = self.add_name(imp.class_package)
+            cn_idx = self.add_name(imp.class_name)
+            on_idx = self.add_name(imp.object_name)
+            import_bytes.extend(write_compact_index(cp_idx))
+            import_bytes.extend(write_compact_index(cn_idx))
+            import_bytes.extend(struct.pack("<i", imp.package_index))
+            import_bytes.extend(write_compact_index(on_idx))
+
+        new_import_offset = len(out_buf)
+        out_buf.extend(import_bytes)
+
+        # 4. Serialize ExportTable
+        export_bytes = bytearray()
+        for exp in self.exports:
+            on_idx = self.add_name(exp.object_name)
+            export_bytes.extend(write_compact_index(exp.class_index))
+            export_bytes.extend(write_compact_index(exp.super_index))
+            export_bytes.extend(struct.pack("<i", exp.package_index))
+            export_bytes.extend(write_compact_index(on_idx))
+            export_bytes.extend(struct.pack("<I", exp.object_flags))
+            export_bytes.extend(write_compact_index(exp.serial_size))
+            if exp.serial_size > 0:
+                export_bytes.extend(write_compact_index(exp.serial_offset))
+
+        new_export_offset = len(out_buf)
+        out_buf.extend(export_bytes)
+
+        # 5. Patch Header
+        ver = target_version if target_version is not None else self.summary.file_version
+        lic = target_license if target_license is not None else self.summary.licensee_mode
+        struct.pack_into("<HH", out_buf, 4, ver, lic)
+
+        # Patch counts and offsets at bytes 12..36
+        struct.pack_into(
+            "<IIIIII",
+            out_buf,
+            12,
+            len(self.names),
+            new_name_offset,
+            len(self.exports),
+            new_export_offset,
+            len(self.imports),
+            new_import_offset,
+        )
+
+        # Update generations if present
+        if self.summary.generations:
+            # First generation updated with new export and name count
+            struct.pack_into("<II", out_buf, 56, len(self.exports), len(self.names))
+
+        out_data = bytes(out_buf)
+        out_p.write_bytes(out_data)
+        return out_data
+

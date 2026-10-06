@@ -18,6 +18,7 @@ from utx_extractor import UTXExtractor
 from terrain_inspector import MapInspector
 from engine_validator import ChronicleValidator
 from map_comparator import MapComparator
+from map_isolator import MapIsolator
 
 
 DEFAULT_CLIENT = r"E:\EndlessWar-proyecto\2-Juego"
@@ -95,6 +96,18 @@ def main():
         default="",
         help="Compare the target map (--unr) with another .unr map file across chronicles.",
     )
+    parser.add_argument(
+        "--isolate",
+        action="store_true",
+        help="Consolidate all map assets into a single USX and UTX file, remapping the UNR for plug-and-play transmigration.",
+    )
+    parser.add_argument(
+        "--target-chronicle",
+        type=str,
+        choices=["c4", "interlude", "c6", "h5", "classic"],
+        default="interlude",
+        help="Target chronicle profile for isolation and downporting (default: interlude).",
+    )
 
     args = parser.parse_args()
 
@@ -122,6 +135,8 @@ def main():
         print(f"[ERROR] UNR file not found: {unr_path}")
         sys.exit(1)
 
+    client_path = Path(args.client) if args.client else None
+
     # Mode 2: Cross-Chronicle Map Comparison
     if args.compare:
         map_b_path = Path(args.compare)
@@ -146,7 +161,32 @@ def main():
         print(f"  -> Saved full diff report to: {report_file}\n")
         return
 
-    client_path = Path(args.client) if args.client else None
+    # Mode 3: Single-Package Map Isolation (1 Archivo por Clase)
+    if args.isolate:
+        if not client_path:
+            print("[ERROR] Game client path required for isolation. Specify --client <path>.")
+            sys.exit(1)
+        out_iso_dir = Path(args.output) if args.output else unr_path.parent / f"Isolated_{unr_path.stem}"
+        print(f"\n=======================================================")
+        print(f" UNR Single-Package Transmigration Pipeline")
+        print(f" Source Map:       {unr_path.name}")
+        print(f" Client Root:      {client_path}")
+        print(f" Target Chronicle: {args.target_chronicle.upper()}")
+        print(f" Output Folder:    {out_iso_dir}")
+        print(f"=======================================================\n")
+
+        isolator = MapIsolator(client_root=client_path)
+        res = isolator.isolate_map(
+            unr_path=unr_path,
+            output_dir=out_iso_dir,
+            target_chronicle=args.target_chronicle,
+        )
+        print(f"[SUCCESS] Isolated deployment bundle created in {res.output_dir}:")
+        print(f"  * Maps/{res.remapped_unr_path.name}")
+        print(f"  * StaticMeshes/{res.consolidated_usx_path.name}")
+        print(f"  * Textures/{res.consolidated_utx_path.name}")
+        return
+
     out_dir = Path(args.output) if args.output else unr_path.parent / f"Export_{unr_path.stem}"
 
     print(f"\n=======================================================")

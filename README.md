@@ -1,34 +1,28 @@
-# UNR Dependency & Downporting Toolkit v1.6
+# UNR Dependency & Downporting Toolkit v1.7
 
 A complete, standalone Python toolkit to inspect, isolate, extract, adapt, and compare Lineage 2 Unreal Engine 2 map sectors (`.unr`), their 3D static meshes (`.usx`), and texture dependencies (`.utx`).
 
 ---
 
-## What's New in v1.6
+## What's New in v1.7
 
-1. **Cross-Chronicle Map Comparator & Differ (`map_comparator.py`)**:
-   - Compares two `.unr` map sectors side-by-side (e.g. C6 Interlude vs Modern Samurai 542).
-   - Generates delta metrics: actor counts, added/removed packages, new engine classes, and mesh usage deltas.
-   - Outputs comprehensive Markdown comparison reports for migration and backporting analysis.
+1. **Single-Package Map Transmigration & Isolation (`map_isolator.py`, `unr_remapper.py`, `usx_consolidator.py`, `utx_consolidator.py`)**:
+   - **1 Archivo por Clase**: Consolida automáticamente todas las mallas en `Map_{SECTOR}_S.usx` y todas las texturas/heightmaps en `Map_{SECTOR}_T.utx`.
+   - **Remapeo de Punteros en `.unr`**: Redirige todas las referencias del mapa hacia los dos paquetes maestros únicos.
+   - **Cero Colisiones**: Permite instalar cualquier mapa en cualquier cliente sin sobreescribir paquetes retail (`Goddard_S`, `Aden_S`, etc.) ni entrar en conflicto de dependencias.
+   - **Parcheo de Crónica y Downgrade Automático**: Convierte cabeceras de versión (`v123`, `lic 28/37`) y degrada clases modernas incompatibles (`Spotlight` $\rightarrow$ `Light`, `AmbientSoundWObject` $\rightarrow$ `AmbientSound`, `DynamicProjector` $\rightarrow$ `Projector`).
 
-2. **Native UTX Texture Extractor (`utx_extractor.py`)**:
-   - Parses `.utx` texture packages directly (with L2 decryption).
-   - Extracts embedded mipmaps and compressed DXT1, DXT3, DXT5, RGBA8, and G16 textures.
-   - Automatically generates valid DirectX `.dds` files and standard `.png` images without needing external closed-source tools.
+2. **Pestaña GUI Dedicada: 📦 Empaquetador Autónomo (1/Clase)**:
+   - Permite seleccionar la crónica de destino y generar el bundle de 3 archivos en 1 solo clic.
 
-3. **Terrain & Actor Placement Census (`terrain_inspector.py`)**:
-   - Robust property parser handling UE2 state frames (`Pawn`/`Actor` execution blocks).
-   - Parses `TerrainInfo` actors to extract heightmap references and terrain scale (X, Y, Z).
-   - Counts exact placements of every 3D model on the map (e.g. `Glacia_base`: 2 instances).
-   - Breaks down actor counts by class (`StaticMeshActor`, `Camera`, `Brush`, `TerrainSector`, etc.).
+3. **Cross-Chronicle Map Comparator & Differ (`map_comparator.py`)**:
+   - Compara mapas `.unr` frente a frente con cálculo automático de deltas y reporte en Markdown.
 
-4. **Engine Compatibility & Chronicle Validator (`engine_validator.py`)**:
-   - Validates map structure and actor classes against target chronicles: **C4 (Scions of Destiny)**, **Interlude (The Chaotic Throne)**, **High Five**, and **Classic**.
-   - Validated against unpacked `Engine.dll` class exports from actual game clients.
-   - Flags missing engine classes (e.g. `Spotlight`, `AmbientSoundWObject`, `NMovableSunLight`) that crash older game clients.
+4. **Native UTX Texture Extractor (`utx_extractor.py`)**:
+   - Extrae texturas DXT1/3/5, RGBA8, G16 a DDS y PNG nativos sin herramientas externas.
 
-5. **Interactive Map Diff Tab in Desktop GUI (`gui.py`)**:
-   - Dedicated visual side-by-side comparison tab with colored deltas.
+5. **Terrain & Actor Placement Census (`terrain_inspector.py`)**:
+   - Extrae el heightmap, escala de terreno y conteo exacto de actores y mallas 3D.
 
 ---
 
@@ -37,17 +31,21 @@ A complete, standalone Python toolkit to inspect, isolate, extract, adapt, and c
 ```
 UNR_tool_v1/
 ├── l2_crypt.py           # Decryption/encryption for Lineage 2 package headers
-├── ue2_package.py        # Low-level UE2 package file parser
+├── ue2_package.py        # Low-level UE2 package parser and serializer
 ├── unr_analyzer.py       # High-level map dependency analyzer
 ├── utx_extractor.py      # Native UTX texture extractor (DDS & PNG)
 ├── terrain_inspector.py  # TerrainInfo & StaticMesh placement inspector
 ├── engine_validator.py   # Cross-chronicle compatibility validator (C4 / Interlude / H5 / Classic)
 ├── map_comparator.py     # Cross-chronicle map differ and delta analyzer
+├── unr_remapper.py       # UNR import table remapper & chronicle downgrader
+├── utx_consolidator.py   # Consolidates all map textures into 1 master Map_{NAME}_T.utx
+├── usx_consolidator.py   # Consolidates all map static meshes into 1 master Map_{NAME}_S.usx
+├── map_isolator.py       # Master orchestrator for Single-Package Map Transmigration
 ├── asset_collector.py    # Asset copier and folder organizer
 ├── texture_optimizer.py  # Image batch resizer and Power-of-Two clamping
 ├── manifest_generator.py # JSON, HTML, and Markdown report generators
-├── cli.py                # Command-Line Interface entry point
-├── gui.py                # Tkinter Graphical User Interface (v1.6)
+├── cli.py                # Command-Line Interface entry point (v1.7)
+├── gui.py                # Tkinter Graphical User Interface (v1.7)
 ├── run_gui.bat           # 1-click Windows launcher for GUI
 ├── run_cli_example.bat   # Example CLI execution batch file
 ├── COMPARACION_C6_VS_OUR.md       # Comparative study: C6 vs Classic
