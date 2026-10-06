@@ -23,9 +23,7 @@ CHRONICLE_PROFILES = {
 }
 
 CLASS_SUBSTITUTIONS = {
-    "Spotlight": "Light",
     "AmbientSoundWObject": "AmbientSoundObject",
-    "DynamicProjector": "Projector",
 }
 
 
@@ -114,7 +112,7 @@ class UNRRemapper:
 
             # Downgrade modern classes that do not exist in target chronicle
             for imp in self.pkg.imports:
-                if imp.object_name in CLASS_SUBSTITUTIONS:
+                if imp.class_name.lower() == "class" and imp.object_name in CLASS_SUBSTITUTIONS:
                     replacement = CLASS_SUBSTITUTIONS[imp.object_name]
                     report.classes_downgraded[imp.object_name] = replacement
                     # Update object name to replacement
