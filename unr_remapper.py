@@ -24,7 +24,7 @@ CHRONICLE_PROFILES = {
 
 CLASS_SUBSTITUTIONS = {
     "Spotlight": "Light",
-    "AmbientSoundWObject": "AmbientSound",
+    "AmbientSoundWObject": "AmbientSoundObject",
     "DynamicProjector": "Projector",
 }
 
@@ -112,15 +112,14 @@ class UNRRemapper:
             target_ver = prof["version"]
             target_lic = prof["license"]
 
-            # If downporting to C4/C6/Interlude (license <= 28), downgrade modern classes
-            if target_lic <= 28 or target_chronicle.lower() in ("c4", "interlude", "c6"):
-                for imp in self.pkg.imports:
-                    if imp.object_name in CLASS_SUBSTITUTIONS:
-                        replacement = CLASS_SUBSTITUTIONS[imp.object_name]
-                        report.classes_downgraded[imp.object_name] = replacement
-                        # Update object name to replacement
-                        imp.object_name = replacement
-                        imp.object_name_index = self.pkg.add_name(replacement)
+            # Downgrade modern classes that do not exist in target chronicle
+            for imp in self.pkg.imports:
+                if imp.object_name in CLASS_SUBSTITUTIONS:
+                    replacement = CLASS_SUBSTITUTIONS[imp.object_name]
+                    report.classes_downgraded[imp.object_name] = replacement
+                    # Update object name to replacement
+                    imp.object_name = replacement
+                    imp.object_name_index = self.pkg.add_name(replacement)
 
         # 6. Save modified package
         out_p = Path(output_path)

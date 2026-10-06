@@ -189,7 +189,7 @@ class USXConsolidator:
             export_raw.extend(write_compact_index(0))   # Super
             export_raw.extend(struct.pack("<i", 0))     # Outer (root)
             export_raw.extend(write_compact_index(name_idx))
-            export_raw.extend(struct.pack("<I", 0x00020001))  # RF_Public | RF_LoadForClient
+            export_raw.extend(struct.pack("<I", 0x000E0004))  # RF_Public | RF_LoadForClient | RF_LoadForServer | RF_LoadForEdit
             export_raw.extend(write_compact_index(sz))
             export_raw.extend(write_compact_index(off))
         out_buf.extend(export_raw)
