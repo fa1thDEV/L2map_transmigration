@@ -108,14 +108,18 @@ class MapIsolator:
             if last_remap_rep.classes_downgraded:
                 print(f"         ({len(last_remap_rep.classes_downgraded)} classes downgraded)")
 
-        # Optional Step 4: Lineage 2 Header Encryption (e.g. Lineage2Ver111)
+        # Optional Step 4: Lineage 2 Header Encryption (e.g. Lineage2Ver111 for maps/meshes, Lineage2Ver121 for textures)
         if encrypt_output:
-            print(f"      -> Encrypting packages with Lineage2Ver{encrypt_output:03d}...")
             from l2_crypt import encrypt_package_file
+            # Lineage 2 Classic l2.exe enforces Lineage2Ver121 (0x79) for all .utx texture packages
+            # at VA 0x1090EE15. If a .utx is Ver111, the client displays 'Files are corrupted!!!!'.
+            # Meanwhile, .unr maps and .usx static meshes accept Lineage2Ver111 (or raw).
+            utx_ver = 121 if encrypt_output in (111, 120, 121) else encrypt_output
+            print(f"      -> Encrypting .unr/.usx packages with Lineage2Ver{encrypt_output:03d} and .utx with Lineage2Ver{utx_ver:03d}...")
             for u in out_unrs:
                 encrypt_package_file(u, u, version=encrypt_output)
             encrypt_package_file(out_usx, out_usx, version=encrypt_output)
-            encrypt_package_file(out_utx, out_utx, version=encrypt_output)
+            encrypt_package_file(out_utx, out_utx, version=utx_ver)
 
         elapsed = time.time() - start_time
 

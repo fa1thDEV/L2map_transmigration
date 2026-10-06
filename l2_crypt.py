@@ -146,7 +146,7 @@ def rsa413_decrypt(data: bytes) -> bytes:
     return result
 
 
-def decrypt_package_data(data: bytes, filename: str) -> Tuple[bytes, int]:
+def decrypt_package_data(data: bytes, filename: str, check_magic: bool = True) -> Tuple[bytes, int]:
     """
     Decrypts Lineage 2 package bytes.
     Returns: (decrypted_bytes, version) where version is 0 for unencrypted/raw packages.
@@ -155,6 +155,8 @@ def decrypt_package_data(data: bytes, filename: str) -> Tuple[bytes, int]:
     if version is None:
         # Check if already a raw Unreal package (Tag: 0x9E2A83C1)
         if len(data) >= 4 and struct.unpack("<I", data[:4])[0] == UNREAL_MAGIC:
+            return data, 0
+        if not check_magic:
             return data, 0
         raise ValueError("Unrecognized file format (not a valid Lineage 2 or Unreal Engine package).")
 
@@ -178,8 +180,8 @@ def decrypt_package_data(data: bytes, filename: str) -> Tuple[bytes, int]:
     else:
         raise ValueError(f"Unsupported Lineage2Ver header: Lineage2Ver{version:03d}")
 
-    # Verify decrypted magic
-    if len(dec) >= 4:
+    # Verify decrypted magic if requested (UE2 packages have magic 0x9E2A83C1; DAT files do not)
+    if check_magic and len(dec) >= 4:
         magic = struct.unpack("<I", dec[:4])[0]
         if magic != UNREAL_MAGIC:
             raise ValueError(f"Decryption failed: expected magic 0x9E2A83C1, got 0x{magic:08X}")
@@ -187,12 +189,21 @@ def decrypt_package_data(data: bytes, filename: str) -> Tuple[bytes, int]:
     return dec, version
 
 
-def decrypt_package_file(file_path: Path | str) -> Tuple[bytes, int]:
+def decrypt_package_file(file_path: Path | str, check_magic: bool = True) -> Tuple[bytes, int]:
     """Loads and decrypts a package from file path."""
     p = Path(file_path)
     with open(p, "rb") as f:
         data = f.read()
-    return decrypt_package_data(data, p.name)
+    return decrypt_package_data(data, p.name, check_magic=check_magic)
+
+
+def decrypt_dat_file(file_path: Path | str) -> bytes:
+    """Loads and decrypts a Lineage 2 DAT or INI file."""
+    p = Path(file_path)
+    with open(p, "rb") as f:
+        data = f.read()
+    dec, _ = decrypt_package_data(data, p.name, check_magic=False)
+    return dec
 
 
 def encrypt_package_data(raw_data: bytes, filename: str, version: int = 111) -> bytes:
