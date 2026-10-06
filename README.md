@@ -92,7 +92,7 @@ UNR_tool_v1/
 Double-click `run_gui.bat` to launch the modern dark-themed application:
 
 1. **Map (.UNR):** Choose the map you wish to inspect or transmigrate.
-2. **L2 Client Root:** Path to game client (defaults to `E:\EndlessWar-proyecto\2-Juego`).
+2. **L2 Client Root:** Path to game client (e.g. `C:\Lineage2\Client`, or auto-detected).
 3. **Output Folder:** Target directory for generated packages and reports.
 4. **Language Toggle:** Click `[ 🇷🇺 Русский ]` / `[ 🇺🇸 English ]` in the top right to switch language dynamically.
 

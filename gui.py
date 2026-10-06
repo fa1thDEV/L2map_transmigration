@@ -27,7 +27,22 @@ from map_isolator import MapIsolator, MapIsolationResult
 from i18n import i18n
 
 
-DEFAULT_CLIENT_DIR = r"E:\EndlessWar-proyecto\2-Juego"
+def get_default_client_dir() -> str:
+    env_dir = os.environ.get("L2_CLIENT_DIR", "")
+    if env_dir and os.path.isdir(env_dir):
+        return env_dir
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent / "2-Juego",
+        Path("./Client"),
+        Path("C:/Lineage2/Client"),
+    ]
+    for c in candidates:
+        if c.is_dir():
+            return str(c)
+    return ""
+
+
+DEFAULT_CLIENT_DIR = get_default_client_dir()
 
 
 class UNRToolApp:
