@@ -124,6 +124,13 @@ def main():
         default="interlude",
         help="Target chronicle profile for isolation and downporting (default: interlude).",
     )
+    parser.add_argument(
+        "--encrypt",
+        type=int,
+        choices=[111, 121],
+        default=None,
+        help="Encrypt output packages with Lineage2Ver header (111 for standard L2, 121 for filename key).",
+    )
 
     args = parser.parse_args()
 
@@ -196,6 +203,7 @@ def main():
             unr_path=unr_path,
             output_dir=out_iso_dir,
             target_chronicle=args.target_chronicle,
+            encrypt_output=args.encrypt,
         )
         print(f"[SUCCESS] Isolated deployment bundle created in {res.output_dir}:")
         print(f"  * Maps/{res.remapped_unr_path.name}")

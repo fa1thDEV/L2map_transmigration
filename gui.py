@@ -705,6 +705,11 @@ class UNRToolApp:
         self.combo_iso_chronicle.set("Interlude (C6)")
         self.combo_iso_chronicle.pack(side="left", padx=5)
 
+        self.var_encrypt_111 = tk.BooleanVar(value=True)
+        self.chk_iso_enc = ttk.Checkbutton(r1, text=i18n("chk_encrypt_111"), variable=self.var_encrypt_111)
+        self.chk_iso_enc.pack(side="left", padx=15)
+        self._reg_text(self.chk_iso_enc, "chk_encrypt_111")
+
         r2 = ttk.Frame(cfg_frame, style="Card.TFrame")
         r2.pack(fill="x", pady=4)
         lbl_out = ttk.Label(r2, text=i18n("label_output"), style="Card.TLabel", width=22)
@@ -1210,10 +1215,12 @@ class UNRToolApp:
         def worker():
             try:
                 isolator = MapIsolator(client_root=client_dir)
+                enc_opt = 111 if self.var_encrypt_111.get() else None
                 res = isolator.isolate_map(
                     unr_path=unr_path,
                     output_dir=out_d,
                     target_chronicle=target_ch,
+                    encrypt_output=enc_opt,
                 )
 
                 def update():

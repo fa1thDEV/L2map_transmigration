@@ -41,7 +41,10 @@ class UTXConsolidator:
 
     def __init__(self, client_root: str | Path):
         self.client_root = Path(client_root)
-        self.tex_dir = self.client_root / "Textures"
+        self.tex_dirs = [
+            self.client_root / "Textures",
+            self.client_root / "SysTextures",
+        ]
         self._pkg_cache: Dict[str, UE2Package] = {}
 
     def _get_package(self, pkg_name: str) -> Optional[UE2Package]:
@@ -49,14 +52,21 @@ class UTXConsolidator:
         if key in self._pkg_cache:
             return self._pkg_cache[key]
 
-        target_file = self.tex_dir / f"{pkg_name}.utx"
-        if not target_file.exists():
-            # Try case-insensitive scan
-            matches = list(self.tex_dir.glob(f"{pkg_name}.*"))
+        target_file = None
+        for d in self.tex_dirs:
+            if not d.exists():
+                continue
+            f = d / f"{pkg_name}.utx"
+            if f.exists():
+                target_file = f
+                break
+            matches = list(d.glob(f"{pkg_name}.*"))
             if matches:
                 target_file = matches[0]
-            else:
-                return None
+                break
+
+        if not target_file:
+            return None
 
         try:
             pkg = UE2Package.load_from_file(target_file)

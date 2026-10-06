@@ -193,3 +193,40 @@ def decrypt_package_file(file_path: Path | str) -> Tuple[bytes, int]:
     with open(p, "rb") as f:
         data = f.read()
     return decrypt_package_data(data, p.name)
+
+
+def encrypt_package_data(raw_data: bytes, filename: str, version: int = 111) -> bytes:
+    """
+    Encrypts raw Unreal Engine package data with Lineage2Ver header.
+    Supported versions: 111 (XOR 0xAC), 121 (Filename XOR).
+    """
+    if version not in (111, 121):
+        raise ValueError(f"Encryption version Lineage2Ver{version} not currently supported (use 111 or 121).")
+
+    header_text = f"Lineage2Ver{version:03d}"
+    header_bytes = header_text.encode("utf-16le")
+    if len(header_bytes) != HEADER_LEN:
+        raise ValueError(f"Unexpected header length {len(header_bytes)}, expected {HEADER_LEN}")
+
+    if version == 111:
+        payload = xor_fixed(raw_data, 0xAC)
+    elif version == 121:
+        payload = xor_fixed(raw_data, filename_key(filename))
+    else:
+        payload = raw_data
+
+    return header_bytes + payload
+
+
+def encrypt_package_file(input_path: Path | str, output_path: Path | str, version: int = 111) -> int:
+    """Encrypts a raw package file and saves to output path."""
+    in_p = Path(input_path)
+    out_p = Path(output_path)
+    with open(in_p, "rb") as f:
+        raw = f.read()
+    enc = encrypt_package_data(raw, in_p.name, version=version)
+    out_p.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_p, "wb") as f:
+        f.write(enc)
+    return len(enc)
+

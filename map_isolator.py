@@ -47,6 +47,7 @@ class MapIsolator:
         target_chronicle: str = "interlude",
         target_mesh_pkg: Optional[str] = None,
         target_tex_pkg: Optional[str] = None,
+        encrypt_output: Optional[int] = None,
     ) -> MapIsolationResult:
         start_time = time.time()
         unr_p = Path(unr_path)
@@ -103,6 +104,14 @@ class MapIsolator:
         print(f"      -> {len(remap_rep.textures_remapped)} textures remapped to {tex_pkg}")
         if remap_rep.classes_downgraded:
             print(f"      -> {len(remap_rep.classes_downgraded)} incompatible classes downgraded")
+
+        # Optional Step 4: Lineage 2 Header Encryption (e.g. Lineage2Ver111)
+        if encrypt_output:
+            print(f"      -> Encrypting packages with Lineage2Ver{encrypt_output:03d}...")
+            from l2_crypt import encrypt_package_file
+            encrypt_package_file(out_unr, out_unr, version=encrypt_output)
+            encrypt_package_file(out_usx, out_usx, version=encrypt_output)
+            encrypt_package_file(out_utx, out_utx, version=encrypt_output)
 
         elapsed = time.time() - start_time
 
