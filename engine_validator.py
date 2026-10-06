@@ -79,7 +79,7 @@ class ChronicleValidator:
         "c4": 121,
         "interlude": 123,
         "h5": 129,
-        "classic": 132,
+        "classic": 133,
     }
 
     def __init__(self, target_chronicle: str = "c4"):

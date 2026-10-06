@@ -19,7 +19,7 @@ CHRONICLE_PROFILES = {
     "interlude": {"version": 123, "license": 28, "name": "Lineage 2 Interlude (C6)"},
     "c6": {"version": 123, "license": 28, "name": "Lineage 2 Interlude (C6)"},
     "h5": {"version": 123, "license": 36, "name": "Lineage 2 High Five"},
-    "classic": {"version": 123, "license": 37, "name": "Lineage 2 Classic"},
+    "classic": {"version": 133, "license": 40, "name": "Lineage 2 Classic (166+)"},
 }
 
 CLASS_SUBSTITUTIONS = {

@@ -21,7 +21,7 @@ CHRONICLE_PROFILES = {
     "interlude": {"version": 123, "license": 28},
     "c6": {"version": 123, "license": 28},
     "h5": {"version": 123, "license": 36},
-    "classic": {"version": 123, "license": 37},
+    "classic": {"version": 133, "license": 40},
 }
 
 
